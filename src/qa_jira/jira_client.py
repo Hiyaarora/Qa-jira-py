@@ -165,6 +165,7 @@ def create_task(
     start_date: str | None,
     due_date: str | None,
     assignee_account_id: str,
+    extra_fields: dict[str, Any] | None = None,
 ) -> CreateIssueResult:
     safe_start = start_date or date.today().isoformat()
     fields: dict[str, Any] = {
@@ -179,6 +180,8 @@ def create_task(
     }
     if label:
         fields["labels"] = [label]
+    if extra_fields:
+        fields.update(extra_fields)
 
     resp = client.post(
         f"{base_url}/rest/api/3/issue",
@@ -205,6 +208,7 @@ def create_bug(
     issue_owner_account_id: str | None,
     environment: str | None,
     label: str | None = None,
+    extra_fields: dict[str, Any] | None = None,
 ) -> CreateIssueResult:
     # Verify the project supports Bug issue type
     try:
@@ -241,6 +245,8 @@ def create_bug(
         base_fields["customfield_10148"] = {"value": environment}
     if label:
         base_fields["labels"] = [label]
+    if extra_fields:
+        base_fields.update(extra_fields)
 
     if epic_key:
         strategies: list[dict[str, Any]] = [
@@ -390,6 +396,88 @@ def add_comment_with_link(
     )
     if resp.status_code >= 400:
         raise ValueError(f"Comment failed: {_err_msgs(resp)}")
+
+
+# Fields the CLI already provides explicitly — don't re-prompt for these
+_HANDLED_FIELD_IDS = {
+    "summary",
+    "description",
+    "project",
+    "issuetype",
+    "parent",
+    "assignee",
+    "reporter",
+    "priority",
+    "duedate",
+    "labels",
+    "attachment",
+    "customfield_10015",  # start date (task)
+    "customfield_10097",  # issue owner (bug)
+    "customfield_10148",  # environment (bug)
+    "customfield_10014",  # epic link (legacy)
+    "customfield_10008",  # epic link (very old)
+}
+
+
+def get_required_extra_fields(
+    client: httpx.Client,
+    base_url: str,
+    auth: str,
+    project_key: str,
+    issue_type_name: str,
+) -> list[dict[str, Any]]:
+    """Discover required custom fields for (project, issue_type) that the CLI doesn't already handle.
+
+    Returns a list of {id, name, allowedValues, schema_type} dicts. Empty list means no extra
+    prompting is needed.
+    """
+    url = (
+        f"{base_url}/rest/api/3/issue/createmeta"
+        f"?projectKeys={project_key}&issuetypeNames={issue_type_name}"
+        "&expand=projects.issuetypes.fields"
+    )
+    try:
+        resp = client.get(
+            url, headers={"Authorization": auth, "Accept": "application/json"}
+        )
+    except httpx.HTTPError:
+        return []
+    if resp.status_code >= 400:
+        return []
+
+    data = resp.json()
+    projects = data.get("projects") or []
+    if not projects:
+        return []
+    issuetypes = projects[0].get("issuetypes") or []
+    if not issuetypes:
+        return []
+    fields = issuetypes[0].get("fields") or {}
+
+    required: list[dict[str, Any]] = []
+    for field_id, field_meta in fields.items():
+        if field_id in _HANDLED_FIELD_IDS:
+            continue
+        if not field_meta.get("required"):
+            continue
+        # Skip system fields we still don't care about
+        if not field_id.startswith("customfield_") and field_id not in {
+            "components",
+            "fixVersions",
+            "versions",
+            "environment",
+        }:
+            continue
+        schema = field_meta.get("schema") or {}
+        required.append(
+            {
+                "id": field_id,
+                "name": field_meta.get("name") or field_id,
+                "allowedValues": field_meta.get("allowedValues") or [],
+                "schema_type": schema.get("type") or "string",
+            }
+        )
+    return required
 
 
 def _extract_environment(description_text: str) -> str:
