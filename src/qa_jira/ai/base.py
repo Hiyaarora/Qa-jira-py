@@ -26,14 +26,76 @@ def strip_fences(raw: str) -> str:
     return _FENCE_RE.sub("", raw).strip()
 
 
+def _find_balanced_object(s: str) -> str | None:
+    """Walk the string and return the first balanced JSON object substring."""
+    start = s.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(s)):
+        c = s[i]
+        if escape:
+            escape = False
+            continue
+        if c == "\\":
+            escape = True
+            continue
+        if c == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start : i + 1]
+    return None
+
+
 def parse_json_loose(raw: str) -> dict[str, Any]:
-    """Try direct JSON, then a one-shot trailing-trim repair."""
+    """Tolerant JSON parser for LLM responses.
+
+    Handles: code fences, leading/trailing prose, embedded objects, truncated output.
+    Raises ValueError if no salvageable JSON object is found.
+    """
     cleaned = strip_fences(raw)
+
+    # 1) Direct parse — cheapest path
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        repaired = re.sub(r',\s*"[^"]*":\s*\[?\s*"?[^"}\]]*$', "", cleaned) + "}"
+        pass
+
+    # 2) Find a balanced { ... } anywhere in the text
+    extracted = _find_balanced_object(cleaned)
+    if extracted:
+        try:
+            return json.loads(extracted)
+        except json.JSONDecodeError:
+            pass
+
+    # 3) Truncated output — drop the trailing partial field and close
+    start = cleaned.find("{")
+    if start < 0:
+        raise ValueError("No JSON object found in response")
+    candidate = cleaned[start:]
+    # Drop a trailing partial `,"key": value` so we can close the object
+    repaired = re.sub(r',\s*"[^"]*":\s*\[?\s*"?[^"}\]]*$', "", candidate)
+    # If the last char is a half-open string, close it
+    if repaired.count('"') % 2 == 1:
+        repaired += '"'
+    # Drop trailing comma if any, then close braces to balance
+    repaired = repaired.rstrip().rstrip(",")
+    open_braces = repaired.count("{") - repaired.count("}")
+    repaired += "}" * max(open_braces, 0)
+    try:
         return json.loads(repaired)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Could not salvage JSON from response: {e}") from e
 
 
 def build_bug_result(

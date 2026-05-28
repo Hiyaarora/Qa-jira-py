@@ -38,7 +38,7 @@ def generate_bug_description(
     raw = provider.complete_json(
         SYSTEM_PROMPT_BUG,
         build_bug_user_prompt(raw_description),
-        max_tokens=2000,
+        max_tokens=4000,
     )
     try:
         parsed = parse_json_loose(raw)
@@ -59,10 +59,17 @@ def generate_task_description(
     raw = provider.complete_json(
         SYSTEM_PROMPT_TASK,
         build_task_user_prompt(task_type, story, bugs, user_notes, attachment),
-        max_tokens=1500,
+        max_tokens=4000,
     )
     try:
         parsed = parse_json_loose(raw)
     except Exception:
-        parsed = {"summary": raw[:800], "details": "", "outcome": "Task completed."}
+        # Couldn't salvage JSON at all. Use the raw text as `details` instead of
+        # dumping JSON fragments into `summary`.
+        cleaned = (raw or "").strip()
+        parsed = {
+            "summary": "AI output could not be parsed as JSON — raw text in Details below.",
+            "details": cleaned[:2000] if cleaned else "(no output)",
+            "outcome": "Task completed.",
+        }
     return build_task_result(parsed, story, bugs, attachment)
