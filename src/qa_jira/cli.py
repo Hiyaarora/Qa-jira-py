@@ -19,6 +19,33 @@ def main() -> None:
     if not args or args[0] in ("-h", "--help", "help"):
         print_help()
         return
-    console.print(f"[red]Unknown command: {' '.join(args)}[/red]")
-    print_help()
-    sys.exit(1)
+
+    cmd, *rest = args
+    if cmd == "setup":
+        from qa_jira.commands.setup import run as setup_run
+
+        setup_run()
+    elif cmd == "task" and rest and rest[0] == "create":
+        from qa_jira.commands.task_create import run as task_run
+
+        task_run()
+    elif cmd == "mk" and rest and rest[0] == "bug":
+        from qa_jira.commands.mk_bug import run as bug_run
+
+        bug_run()
+    elif cmd == "mk" and rest and rest[0] == "bugsheet":
+        from qa_jira.commands.mk_bugsheet import run as bs_run
+
+        bs_run()
+    elif cmd == "rm":
+        target = rest[0] if rest else None
+        if not target:
+            console.print("[red]Usage: jira rm <ISSUE-KEY or URL>[/red]")
+            sys.exit(1)
+        from qa_jira.commands.rm import run as rm_run
+
+        rm_run(target)
+    else:
+        console.print(f"[red]Unknown command: {' '.join(args)}[/red]")
+        print_help()
+        sys.exit(1)
