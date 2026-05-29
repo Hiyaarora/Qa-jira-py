@@ -1,18 +1,8 @@
 from __future__ import annotations
 
-from qa_jira.ai.base import (
-    Provider,
-    build_bug_result,
-    build_task_result,
-    parse_json_loose,
-)
-from qa_jira.models import (
-    AIBugResult,
-    AITaskResult,
-    AttachmentInfo,
-    Config,
-    Issue,
-)
+from qa_jira.ai.base import build_bug_result, build_task_result, parse_json_loose
+from qa_jira.ai.http_provider import HttpProvider
+from qa_jira.models import AIBugResult, AITaskResult, AttachmentInfo, Config, Issue
 from qa_jira.prompts import (
     SYSTEM_PROMPT_BUG,
     SYSTEM_PROMPT_TASK,
@@ -21,14 +11,8 @@ from qa_jira.prompts import (
 )
 
 
-def get_provider(config: Config) -> Provider:
-    if config.aiProvider == "anthropic":
-        from qa_jira.ai.anthropic_provider import AnthropicProvider
-
-        return AnthropicProvider(config)
-    from qa_jira.ai.openai_compat_provider import OpenAICompatProvider
-
-    return OpenAICompatProvider(config)
+def get_provider(config: Config) -> HttpProvider:
+    return HttpProvider(config)
 
 
 def generate_bug_description(
@@ -64,11 +48,9 @@ def generate_task_description(
     try:
         parsed = parse_json_loose(raw)
     except Exception:
-        # Couldn't salvage JSON at all. Use the raw text as `details` instead of
-        # dumping JSON fragments into `summary`.
         cleaned = (raw or "").strip()
         parsed = {
-            "summary": "AI output could not be parsed as JSON — raw text in Details below.",
+            "summary": "AI output could not be parsed — raw text in Details below.",
             "details": cleaned[:2000] if cleaned else "(no output)",
             "outcome": "Task completed.",
         }

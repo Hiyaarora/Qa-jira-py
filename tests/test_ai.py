@@ -64,22 +64,10 @@ def test_build_task_result_with_story_and_bugs():
     assert any(blk.get("type") == "rule" for blk in r.adf["content"])
 
 
-def test_get_provider_routes_to_openai_compat(monkeypatch):
+def test_get_provider_returns_http_provider():
     from qa_jira.ai import get_provider
+    from qa_jira.ai.http_provider import HttpProvider
     from qa_jira.models import Config
-
-    captured: dict[str, object] = {}
-
-    class FakeClient:
-        def __init__(self, **kw):
-            captured.update(kw)
-
-        class chat:
-            class completions:
-                @staticmethod
-                def create(**kw): ...
-
-    monkeypatch.setattr("qa_jira.ai.openai_compat_provider.OpenAI", FakeClient)
 
     cfg = Config(
         jiraEmail="x",
@@ -91,6 +79,21 @@ def test_get_provider_routes_to_openai_compat(monkeypatch):
         aiApiKey="k",
         aiModel="m",
     )
-    get_provider(cfg)
-    assert captured["base_url"] == "https://openrouter.ai/api/v1"
-    assert captured["api_key"] == "k"
+    provider = get_provider(cfg)
+    assert isinstance(provider, HttpProvider)
+    assert provider._url == "https://openrouter.ai/api/v1/chat/completions"
+    assert "Bearer k" in provider._headers["Authorization"]
+
+
+def test_http_provider_uses_custom_base_url():
+    from qa_jira.ai.http_provider import HttpProvider
+    from qa_jira.models import Config
+
+    cfg = Config(
+        jiraEmail="x", jiraApiToken="y", jiraBaseUrl="https://x",
+        accountId="a", displayName="N", aiProvider="openai-compatible",
+        aiApiKey="k", aiModel="m",
+        aiBaseUrl="https://my-endpoint.com/v1",
+    )
+    provider = HttpProvider(cfg)
+    assert provider._url == "https://my-endpoint.com/v1/chat/completions"

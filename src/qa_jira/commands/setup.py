@@ -52,26 +52,19 @@ def _validate_jira(email: str, token: str) -> tuple[str, str]:
     return data["accountId"], data["displayName"]
 
 
-def _validate_ai_anthropic(api_key: str, model: str) -> None:
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=api_key)
-    client.messages.create(
-        model=model,
-        max_tokens=10,
-        messages=[{"role": "user", "content": 'Say "ok" only.'}],
-    )
-
-
-def _validate_ai_openai_compat(api_key: str, model: str, base_url: str) -> None:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    client.chat.completions.create(
-        model=model,
-        max_tokens=10,
-        messages=[{"role": "user", "content": 'Say "ok" only.'}],
-    )
+def _validate_ai(api_key: str, model: str, base_url: str) -> None:
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": "Bearer " + api_key, "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "max_tokens": 10,
+        "messages": [{"role": "user", "content": 'Say "ok" only.'}],
+    }
+    import httpx as _httpx
+    with _httpx.Client(timeout=15) as client:
+        resp = client.post(url, json=payload, headers=headers)
+    if resp.status_code >= 400:
+        raise ValueError(f"HTTP {resp.status_code}: {resp.text[:200]}")
 
 
 def run() -> None:
@@ -139,10 +132,7 @@ def run() -> None:
 
     with console.status("Validating AI key..."):
         try:
-            if provider_choice == "anthropic":
-                _validate_ai_anthropic(ai_api_key, ai_model)
-            else:
-                _validate_ai_openai_compat(ai_api_key, ai_model, ai_base_url)
+            _validate_ai(ai_api_key, ai_model, ai_base_url or "https://openrouter.ai/api/v1")
             console.print("[green]✔[/green] AI key validated")
         except Exception as e:
             console.print(f"[yellow]⚠ Could not validate AI key ({e}) — saving anyway[/yellow]")
