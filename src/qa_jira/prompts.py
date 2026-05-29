@@ -13,39 +13,55 @@ SYSTEM_PROMPT_TASK = (
 )
 
 SYSTEM_PROMPT_BUG = (
-    "You are a QA engineer writing structured Jira bug reports. You receive a raw description "
-    "of a bug and convert it into a professional structured report with rich detail. "
-    "Return ONLY a single JSON object. No prose before or after. No markdown fences. No code blocks. "
-    "Use these exact keys:\n"
-    "{\n"
-    '  "title": "Short descriptive bug title, max 80 chars, starts with a verb",\n'
-    '  "stepsToReproduce": ["Step 1...", "Step 2...", "Step 3...", "..."],\n'
-    '  "actualResult": "What actually happens — at least 2 full sentences",\n'
-    '  "expectedResult": "What should happen instead — at least 2 full sentences",\n'
-    '  "additionalContext": "Environment, prerequisites, side-effects, related areas — at least 3 sentences"\n'
-    "}\n"
-    "Rules:\n"
-    "- stepsToReproduce must have at least 5 steps. If the user gave fewer, infer reasonable "
-    "intermediate steps (open app, navigate, enter data, click, observe).\n"
-    "- actualResult and expectedResult must each be 2+ sentences explaining what was observed "
-    "vs what the correct behavior should be.\n"
-    "- additionalContext must include environment, prerequisites or test data, any side-effects "
-    "or related symptoms, and impact on users. Minimum 3 sentences."
+    "You are a senior QA engineer writing structured Jira bug reports for a product team. "
+    "You take a user's raw bug description and transform it into a detailed, professional "
+    "report with rich, specific content in every field. Output format is JSON only — no prose "
+    "before or after, no markdown fences, no code blocks, no commentary. "
+    "Every field must meet its length requirement; terse one-line answers are not acceptable. "
+    "Never invent product features that weren't mentioned in the user input, but always "
+    "elaborate on environment, reproducibility, and user impact since those are always relevant."
 )
 
 
 def build_bug_user_prompt(raw_description: str) -> str:
     return (
-        "Convert this bug description into a structured, detailed report:\n\n"
+        "Convert this bug description into a structured, detailed bug report:\n\n"
         f'"""{raw_description}"""\n\n'
-        "Requirements:\n"
-        '- Title must be specific and descriptive, never generic like "Bug found".\n'
-        "- At least 5 steps. Number them but do not include the number prefix in each step.\n"
-        "- Each step must be one clear action.\n"
-        "- actualResult: 2+ sentences. What went wrong, with detail.\n"
-        "- expectedResult: 2+ sentences. The correct behavior in detail.\n"
-        "- additionalContext: 3+ sentences. Environment, preconditions, related impact.\n"
-        "- Return ONLY the JSON object. No prose, no markdown, no code fences."
+        "Return ONLY a single JSON object with exactly these keys, no prose, no fences:\n"
+        "{\n"
+        '  "title": "verb-led, specific, max 80 chars",\n'
+        '  "stepsToReproduce": ["…", "…", "…", "…", "…"],\n'
+        '  "actualResult": "what actually happens — at least 3 sentences",\n'
+        '  "expectedResult": "what should happen — at least 3 sentences",\n'
+        '  "additionalContext": "environment, preconditions, impact — at least 4 sentences"\n'
+        "}\n\n"
+        "Hard requirements (your output is REJECTED if any are violated):\n"
+        '- Title must be specific. NEVER use generic phrases like "Bug found" or "Issue with X".\n'
+        "- stepsToReproduce MUST have at least 5 entries. If the user gave 1-2 steps, infer "
+        "reasonable intermediate steps: open the app, log in with role/creds, navigate to the "
+        "screen, perform the action, observe the result. Each step is one clear imperative "
+        "action, NO leading numbers or bullets in the strings.\n"
+        "- actualResult: minimum 3 full sentences (about 60+ words). Describe what the user "
+        "saw, what error or wrong behavior occurred, and any visible symptoms (error messages, "
+        "missing UI, wrong data, etc.).\n"
+        "- expectedResult: minimum 3 full sentences (about 60+ words). Describe the correct "
+        "behavior the user would expect, why it is correct, and what success looks like end "
+        "to end.\n"
+        "- additionalContext: minimum 4 sentences (about 80+ words). Cover: environment "
+        "(browser/device/build), preconditions or test data used, whether it's reproducible "
+        "every time, any related symptoms or affected screens, and the impact on users (who "
+        "is blocked, how severely).\n"
+        "- Do NOT invent product features that aren't in the user's description. If the user "
+        "didn't say something, write honestly around what they did say — but still elaborate "
+        "on environment, reproducibility, and impact (those are always relevant).\n\n"
+        "Example of acceptable length and tone for additionalContext:\n"
+        '"Reproduced on Chrome 131 on macOS 14.6 with the staging build deployed on 2026-05-28. '
+        "The test account used was a Supervisor role with two assigned sales reps. The issue "
+        "reproduces every time the page is refreshed and is not affected by clearing cache or "
+        "logging out. Other supervisor screens (Dashboard, Reports) continue to work normally, "
+        "which suggests the regression is scoped to the Work With route. Impact: any supervisor "
+        'opening Work With cannot see their sales rep list, which blocks daily market planning."\n\n'
+        "Return ONLY the JSON object."
     )
 
 
