@@ -40,13 +40,14 @@ def run() -> None:
 
     import re as _re
     while True:
-        epic_key_raw = (
-            (questionary.text("Which epic? (e.g. QA-247):").ask() or "").strip()
-        )
+        epic_key_raw = questionary.text("Which epic? (e.g. QA-247):").ask()
+        if epic_key_raw is None:  # Ctrl+C / Escape — exit cleanly
+            console.print("[dim]Cancelled.[/dim]")
+            sys.exit(0)
+        epic_key_raw = epic_key_raw.strip()
         if not epic_key_raw:
             console.print("[yellow]⚠ Epic key is required (e.g. HFC-315). Try again.[/yellow]")
             continue
-        # Accept either a bare key or a Jira browse URL
         url_match = _re.search(r'/browse/([A-Za-z][A-Za-z0-9]*-\d+)', epic_key_raw)
         if url_match:
             epic_key_raw = url_match.group(1).upper()
