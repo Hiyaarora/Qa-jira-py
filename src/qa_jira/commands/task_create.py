@@ -41,13 +41,22 @@ def run() -> None:
     import re as _re
     while True:
         epic_key_raw = (
-            (questionary.text("Which epic? (e.g. QA-247):").ask() or "").strip().upper()
+            (questionary.text("Which epic? (e.g. QA-247):").ask() or "").strip()
         )
-        if not _re.match(r'^[A-Z][A-Z0-9]*-\d+$', epic_key_raw):
-            console.print(
-                f"[yellow]⚠ '{epic_key_raw}' doesn't look like a Jira issue key (e.g. HFC-315). Try again.[/yellow]"
-            )
+        if not epic_key_raw:
+            console.print("[yellow]⚠ Epic key is required (e.g. HFC-315). Try again.[/yellow]")
             continue
+        # Accept either a bare key or a Jira browse URL
+        url_match = _re.search(r'/browse/([A-Za-z][A-Za-z0-9]*-\d+)', epic_key_raw)
+        if url_match:
+            epic_key_raw = url_match.group(1).upper()
+        else:
+            epic_key_raw = epic_key_raw.upper()
+            if not _re.match(r'^[A-Z][A-Z0-9]*-\d+$', epic_key_raw):
+                console.print(
+                    f"[yellow]⚠ '{epic_key_raw}' doesn't look like a Jira key (e.g. HFC-315). Try again.[/yellow]"
+                )
+                continue
         break
 
     with httpx.Client(timeout=30) as client:
@@ -104,7 +113,7 @@ def run() -> None:
                 try:
                     story = fetch_issue_details(client, cfg.jiraBaseUrl, auth, story_input)
                     console.print(f"[green]✔[/green] Story: [white]{story.summary}[/white]")
-                except ValueError as e:
+                except (ValueError, httpx.HTTPError) as e:
                     console.print(f"[yellow]⚠ Story fetch failed: {e} — continuing[/yellow]")
 
         bug_list: list[Issue] = []
@@ -115,7 +124,7 @@ def run() -> None:
                         b = fetch_issue_details(client, cfg.jiraBaseUrl, auth, raw_key)
                         bug_list.append(b)
                         console.print(f"[green]✔[/green] Bug: [cyan]{b.key}[/cyan] — {b.summary}")
-                    except ValueError as e:
+                    except (ValueError, httpx.HTTPError) as e:
                         console.print(f"[yellow]⚠ {e} — continuing[/yellow]")
 
         with console.status("🤖 Generating description..."):

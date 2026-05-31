@@ -143,7 +143,7 @@ def run() -> None:
                     environment=environment,
                     extra_fields=extra_fields,
                 )
-            except ValueError as e:
+            except (ValueError, httpx.HTTPError) as e:
                 console.print(f"[red]✗ {e}[/red]")
                 sys.exit(1)
 

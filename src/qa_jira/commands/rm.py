@@ -31,7 +31,7 @@ def run(target: str) -> None:
         with console.status("Fetching issue..."):
             try:
                 issue = fetch_issue_details(client, cfg.jiraBaseUrl, auth, key)
-            except ValueError as e:
+            except (ValueError, httpx.HTTPError) as e:
                 console.print(f"[red]✗ {e}[/red]")
                 sys.exit(1)
 
