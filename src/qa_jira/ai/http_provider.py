@@ -7,15 +7,39 @@ from qa_jira.models import Config
 ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Tried in order when the configured model returns 404 (offline/removed).
-# All are free on OpenRouter and support the chat-completions API.
+# Seed list — tried in order when configured model returns 404.
+# Supplemented at runtime by querying OpenRouter's /models endpoint.
 FALLBACK_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free",
     "mistralai/mistral-7b-instruct:free",
     "qwen/qwen-2-7b-instruct:free",
     "microsoft/phi-3-mini-128k-instruct:free",
     "google/gemma-3-4b-it:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "openchat/openchat-7b:free",
 ]
+
+
+def _fetch_free_models(api_key: str) -> list[str]:
+    """Ask OpenRouter which free models are currently available."""
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": "Bearer " + api_key},
+            )
+        if resp.status_code != 200:
+            return []
+        models = resp.json().get("data", [])
+        # A model is free if its prompt pricing is "0"
+        free = [
+            m["id"]
+            for m in models
+            if str(m.get("pricing", {}).get("prompt", "1")) == "0"
+        ]
+        return free
+    except Exception:
+        return []
 
 
 class HttpProvider:
@@ -43,7 +67,8 @@ class HttpProvider:
             "Content-Type": "application/json",
         }
         self._model = config.aiModel
-        # Only use fallbacks for OpenRouter (free tier); paid providers don't need them
+        self._api_key = config.aiApiKey
+        # Only use fallbacks for OpenRouter; paid/self-hosted providers don't need them
         self._use_fallbacks = config.aiProvider in ("openrouter", "openai-compatible")
 
     def _post(self, model: str, system_prompt: str, user_prompt: str, max_tokens: int) -> httpx.Response:
@@ -61,7 +86,13 @@ class HttpProvider:
     def complete_json(self, system_prompt: str, user_prompt: str, max_tokens: int) -> str:
         models_to_try = [self._model]
         if self._use_fallbacks:
-            models_to_try += [m for m in FALLBACK_MODELS if m != self._model]
+            # Fetch live free models from OpenRouter, then append seed list as backstop
+            live_free = _fetch_free_models(self._api_key)
+            seen = {self._model}
+            for m in live_free + FALLBACK_MODELS:
+                if m not in seen:
+                    seen.add(m)
+                    models_to_try.append(m)
 
         last_err = "No models available"
         for model in models_to_try:
