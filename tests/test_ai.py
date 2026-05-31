@@ -96,15 +96,16 @@ def test_http_provider_uses_custom_base_url():
 
 def test_http_provider_falls_back_on_404(monkeypatch):
     import httpx
+    import unittest.mock as mock
     from qa_jira.ai.http_provider import HttpProvider, FALLBACK_MODELS
     from qa_jira.models import Config
 
     calls = []
+    good_model = FALLBACK_MODELS[0]
 
-    def fake_post(url, json=None, headers=None):
-        model = json["messages"][0]["content"] if False else json["model"]
+    def fake_post(model, system_prompt, user_prompt, max_tokens):
         calls.append(model)
-        if model != FALLBACK_MODELS[0]:
+        if model != good_model:
             return httpx.Response(404, json={"error": {"message": "not found"}})
         return httpx.Response(200, json={
             "choices": [{"message": {"content": '{"title": "ok"}'}}]
@@ -117,12 +118,12 @@ def test_http_provider_falls_back_on_404(monkeypatch):
     )
     provider = HttpProvider(cfg)
 
-    # Patch the internal _post to use fake_post
-    import unittest.mock as mock
-    with mock.patch.object(provider, "_post", side_effect=lambda m, s, u, t: fake_post(provider._url, json={"model": m})):
+    # Patch _fetch_free_models to return empty (isolate from network)
+    # and patch _post to simulate 404 then success
+    with mock.patch("qa_jira.ai.http_provider._fetch_free_models", return_value=[]), \
+         mock.patch.object(provider, "_post", side_effect=fake_post):
         result = provider.complete_json("sys", "user", 100)
 
     assert result == '{"title": "ok"}'
-    # First call was the configured model (bad), second was first fallback
     assert calls[0] == "bad-model:free"
-    assert calls[1] == FALLBACK_MODELS[0]
+    assert calls[1] == good_model
