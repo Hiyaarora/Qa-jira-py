@@ -47,10 +47,23 @@ def run() -> None:
         choices=["Production", "Demo", "Test"],
     ).ask()
 
+    # Collect image paths — user-attached screenshot (if any)
+    image_paths: list[str] = []
+    if attachment and attachment.type == "file" and attachment.filePath:
+        from qa_jira.ai.http_provider import IMAGE_MIME
+        from pathlib import Path as _Path
+        if _Path(attachment.filePath).suffix.lower() in IMAGE_MIME:
+            image_paths.append(attachment.filePath)
+
     with console.status("🤖 Structuring bug report..."):
         try:
-            bug_ai = generate_bug_description(cfg, raw_description, environment, attachment)
-            console.print("[green]✔[/green] Bug report structured by AI")
+            bug_ai = generate_bug_description(
+                cfg, raw_description, environment, attachment, image_paths or None
+            )
+            if image_paths:
+                console.print("[green]✔[/green] Bug report structured by AI (read your screenshot)")
+            else:
+                console.print("[green]✔[/green] Bug report structured by AI")
         except Exception as e:
             console.print(f"[yellow]⚠ AI failed: {e} — using manual input[/yellow]")
             bug_ai = build_bug_result({}, raw_description, environment, attachment)

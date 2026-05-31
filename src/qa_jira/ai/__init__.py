@@ -20,12 +20,14 @@ def generate_bug_description(
     raw_description: str,
     environment: str,
     attachment: AttachmentInfo | None = None,
+    image_paths: list[str] | None = None,
 ) -> AIBugResult:
     provider = get_provider(config)
     raw = provider.complete_json(
         SYSTEM_PROMPT_BUG,
         build_bug_user_prompt(raw_description),
         max_tokens=4000,
+        image_paths=image_paths or [],
     )
     try:
         parsed = parse_json_loose(raw)
@@ -41,12 +43,14 @@ def generate_task_description(
     bugs: list[Issue],
     user_notes: str,
     attachment: AttachmentInfo | None,
+    image_paths: list[str] | None = None,
 ) -> AITaskResult:
     provider = get_provider(config)
     raw = provider.complete_json(
         SYSTEM_PROMPT_TASK,
         build_task_user_prompt(task_type, story, bugs, user_notes, attachment),
         max_tokens=4000,
+        image_paths=image_paths or [],
     )
     try:
         parsed = parse_json_loose(raw)

@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import httpx
 
 from qa_jira.models import Config
+
+IMAGE_MIME = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+# Vision-capable free models tried in order when images are present
+VISION_MODELS = [
+    "meta-llama/llama-3.2-11b-vision-instruct:free",
+    "qwen/qwen2-vl-7b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "meta-llama/llama-3.2-90b-vision-instruct:free",
+]
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -71,24 +90,65 @@ class HttpProvider:
         # Only use fallbacks for OpenRouter; paid/self-hosted providers don't need them
         self._use_fallbacks = config.aiProvider in ("openrouter", "openai-compatible")
 
-    def _post(self, model: str, system_prompt: str, user_prompt: str, max_tokens: int) -> httpx.Response:
+    @staticmethod
+    def _encode_images(image_paths: list[str]) -> list[dict]:
+        """Return a list of image_url content blocks for the multimodal message."""
+        blocks = []
+        for path in image_paths:
+            p = Path(path)
+            if not p.exists():
+                continue
+            mime = IMAGE_MIME.get(p.suffix.lower(), "image/png")
+            data = base64.b64encode(p.read_bytes()).decode()
+            blocks.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{data}"},
+            })
+        return blocks
+
+    def _post(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int,
+        image_paths: list[str] | None = None,
+    ) -> httpx.Response:
+        if image_paths:
+            user_content: str | list = [{"type": "text", "text": user_prompt}]
+            user_content += self._encode_images(image_paths)
+        else:
+            user_content = user_prompt
+
         payload = {
             "model": model,
             "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": user_content},
             ],
         }
-        with httpx.Client(timeout=60) as client:
+        with httpx.Client(timeout=90) as client:
             return client.post(self._url, json=payload, headers=self._headers)
 
-    def complete_json(self, system_prompt: str, user_prompt: str, max_tokens: int) -> str:
-        models_to_try = [self._model]
+    def complete_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int,
+        image_paths: list[str] | None = None,
+    ) -> str:
+        # When images are present, try vision models first
+        if image_paths and self._use_fallbacks:
+            vision_first = [m for m in VISION_MODELS if m != self._model]
+            base_list = [self._model] + vision_first
+        else:
+            base_list = [self._model]
+
+        models_to_try = list(base_list)
         if self._use_fallbacks:
-            # Fetch live free models from OpenRouter, then append seed list as backstop
             live_free = _fetch_free_models(self._api_key)
-            seen = {self._model}
+            seen = set(base_list)
             for m in live_free + FALLBACK_MODELS:
                 if m not in seen:
                     seen.add(m)
@@ -96,7 +156,7 @@ class HttpProvider:
 
         last_err = "No models available"
         for model in models_to_try:
-            resp = self._post(model, system_prompt, user_prompt, max_tokens)
+            resp = self._post(model, system_prompt, user_prompt, max_tokens, image_paths)
 
             if resp.status_code == 404:
                 # Model offline — silently try next

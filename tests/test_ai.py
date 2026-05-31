@@ -103,7 +103,7 @@ def test_http_provider_falls_back_on_404(monkeypatch):
     calls = []
     good_model = FALLBACK_MODELS[0]
 
-    def fake_post(model, system_prompt, user_prompt, max_tokens):
+    def fake_post(model, system_prompt, user_prompt, max_tokens, image_paths=None):
         calls.append(model)
         if model != good_model:
             return httpx.Response(404, json={"error": {"message": "not found"}})

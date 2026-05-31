@@ -23,6 +23,7 @@ from qa_jira.jira_client import (
     basic_auth_header,
     create_task,
     fetch_issue_details,
+    fetch_story_images,
     get_epic_info,
     transition_to_done,
 )
@@ -126,12 +127,33 @@ def run() -> None:
                     except (ValueError, httpx.HTTPError) as e:
                         console.print(f"[yellow]⚠ {e} — continuing[/yellow]")
 
+        # Collect image paths: story attachments + user-attached screenshot
+        image_paths: list[str] = []
+        if story:
+            with console.status("Looking for images in story..."):
+                story_imgs = fetch_story_images(client, cfg.jiraBaseUrl, auth, story.key)
+                if story_imgs:
+                    console.print(
+                        f"[dim]  Found {len(story_imgs)} image(s) in story — AI will read them[/dim]"
+                    )
+                image_paths += story_imgs
+
+        if attachment and attachment.type == "file" and attachment.filePath:
+            from qa_jira.ai.http_provider import IMAGE_MIME
+            from pathlib import Path as _Path
+            if _Path(attachment.filePath).suffix.lower() in IMAGE_MIME:
+                image_paths.append(attachment.filePath)
+
         with console.status("🤖 Generating description..."):
             try:
                 ai_result = generate_task_description(
-                    cfg, task_type, story, bug_list, user_notes, attachment
+                    cfg, task_type, story, bug_list, user_notes, attachment,
+                    image_paths=image_paths or None,
                 )
-                console.print("[green]✔[/green] Description generated")
+                if image_paths:
+                    console.print("[green]✔[/green] Description generated (AI read the images)")
+                else:
+                    console.print("[green]✔[/green] Description generated")
             except Exception as e:
                 console.print(f"[yellow]⚠ AI failed: {e}[/yellow]")
                 fallback = questionary.text("Enter description manually:").ask() or ""
@@ -230,6 +252,13 @@ def run() -> None:
 
         if attachment:
             upload_attachment(client, cfg.jiraBaseUrl, auth, created.issueKey, attachment)
+
+    # Clean up temp story image files
+    for p in image_paths:
+        try:
+            Path(p).unlink(missing_ok=True)
+        except Exception:
+            pass
 
     elapsed = time.monotonic() - start
     console.print("\n" + "═" * 50)

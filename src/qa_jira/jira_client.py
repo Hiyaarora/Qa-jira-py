@@ -499,6 +499,58 @@ def get_required_extra_fields(
     return required
 
 
+_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def fetch_story_images(
+    client: httpx.Client, base_url: str, auth: str, issue_key: str
+) -> list[str]:
+    """Download image attachments from a Jira issue to temp files.
+
+    Returns a list of temp file paths. Caller is responsible for deleting them.
+    Falls back to empty list on any error so callers can always proceed.
+    """
+    import tempfile
+
+    try:
+        resp = client.get(
+            f"{base_url}/rest/api/3/issue/{issue_key}?fields=attachment",
+            headers={"Authorization": auth, "Accept": "application/json"},
+        )
+        if resp.status_code >= 400:
+            return []
+    except httpx.HTTPError:
+        return []
+
+    attachments = resp.json().get("fields", {}).get("attachment") or []
+    paths: list[str] = []
+
+    for att in attachments:
+        mime = att.get("mimeType", "")
+        filename = att.get("filename", "")
+        content_url = att.get("content", "")
+
+        is_image = mime in _IMAGE_CONTENT_TYPES or any(
+            filename.lower().endswith(ext) for ext in _IMAGE_EXTENSIONS
+        )
+        if not is_image or not content_url:
+            continue
+
+        try:
+            dl = client.get(content_url, headers={"Authorization": auth}, follow_redirects=True)
+            if dl.status_code >= 400:
+                continue
+            suffix = Path(filename).suffix or ".png"
+            tmp = tempfile.mktemp(suffix=suffix)
+            Path(tmp).write_bytes(dl.content)
+            paths.append(tmp)
+        except Exception:
+            continue
+
+    return paths
+
+
 def _extract_environment(description_text: str) -> str:
     if not description_text:
         return "UAT"
