@@ -18,9 +18,8 @@ from qa_jira.commands._helpers import (
     prompt_for_required_extra_fields,
 )
 from qa_jira.config import get_config
+from qa_jira.commands._attachment import upload_attachment
 from qa_jira.jira_client import (
-    add_comment_with_link,
-    attach_file_to_issue,
     basic_auth_header,
     create_task,
     fetch_issue_details,
@@ -229,32 +228,8 @@ def run() -> None:
             except ValueError as e:
                 console.print(f"[yellow]⚠ {e}[/yellow]")
 
-        if attachment and attachment.type == "file" and attachment.filePath:
-            with console.status(f"Uploading {attachment.fileName}..."):
-                try:
-                    attach_file_to_issue(
-                        client,
-                        cfg.jiraBaseUrl,
-                        auth,
-                        created.issueKey,
-                        attachment.filePath,
-                    )
-                    console.print(f"[green]✔[/green] {attachment.label} attached")
-                except ValueError as e:
-                    console.print(f"[yellow]⚠ Upload failed: {e}[/yellow]")
-        elif attachment and attachment.type == "google-sheet" and attachment.url:
-            try:
-                add_comment_with_link(
-                    client,
-                    cfg.jiraBaseUrl,
-                    auth,
-                    created.issueKey,
-                    "Test Cases (Google Sheet)",
-                    attachment.url,
-                )
-                console.print("[green]✔[/green] Google Sheet link added as comment")
-            except ValueError as e:
-                console.print(f"[yellow]⚠ Comment failed: {e}[/yellow]")
+        if attachment:
+            upload_attachment(client, cfg.jiraBaseUrl, auth, created.issueKey, attachment)
 
     elapsed = time.monotonic() - start
     console.print("\n" + "═" * 50)

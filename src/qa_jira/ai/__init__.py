@@ -16,7 +16,10 @@ def get_provider(config: Config) -> HttpProvider:
 
 
 def generate_bug_description(
-    config: Config, raw_description: str, environment: str
+    config: Config,
+    raw_description: str,
+    environment: str,
+    attachment: AttachmentInfo | None = None,
 ) -> AIBugResult:
     provider = get_provider(config)
     raw = provider.complete_json(
@@ -28,7 +31,7 @@ def generate_bug_description(
         parsed = parse_json_loose(raw)
     except Exception:
         parsed = {}
-    return build_bug_result(parsed, raw_description, environment)
+    return build_bug_result(parsed, raw_description, environment, attachment)
 
 
 def generate_task_description(

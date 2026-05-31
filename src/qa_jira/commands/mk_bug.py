@@ -19,9 +19,8 @@ from qa_jira.commands._helpers import (
     prompt_for_required_extra_fields,
 )
 from qa_jira.config import get_config
+from qa_jira.commands._attachment import upload_attachment
 from qa_jira.jira_client import (
-    add_comment_with_link,
-    attach_file_to_issue,
     basic_auth_header,
     create_bug,
     transition_to_in_progress,
@@ -50,11 +49,11 @@ def run() -> None:
 
     with console.status("🤖 Structuring bug report..."):
         try:
-            bug_ai = generate_bug_description(cfg, raw_description, environment)
+            bug_ai = generate_bug_description(cfg, raw_description, environment, attachment)
             console.print("[green]✔[/green] Bug report structured by AI")
         except Exception as e:
             console.print(f"[yellow]⚠ AI failed: {e} — using manual input[/yellow]")
-            bug_ai = build_bug_result({}, raw_description, environment)
+            bug_ai = build_bug_result({}, raw_description, environment, attachment)
 
     priority = questionary.select(
         "Priority:",
@@ -150,36 +149,8 @@ def run() -> None:
                 console.print(f"[red]✗ {e}[/red]")
                 sys.exit(1)
 
-        if attachment and attachment.type == "file" and attachment.filePath:
-            with console.status(f"Uploading {attachment.fileName}..."):
-                try:
-                    attach_file_to_issue(
-                        client,
-                        cfg.jiraBaseUrl,
-                        auth,
-                        created.issueKey,
-                        attachment.filePath,
-                    )
-                    console.print(
-                        f"[green]✔[/green] File attached: {attachment.fileName}"
-                    )
-                except ValueError as e:
-                    console.print(f"[yellow]⚠ Upload failed: {e}[/yellow]")
-        elif attachment and attachment.type == "google-sheet" and attachment.url:
-            try:
-                add_comment_with_link(
-                    client,
-                    cfg.jiraBaseUrl,
-                    auth,
-                    created.issueKey,
-                    "Reference (Google Sheet)",
-                    attachment.url,
-                )
-                console.print(
-                    "[green]✔[/green] Google Sheet link added as comment"
-                )
-            except ValueError as e:
-                console.print(f"[yellow]⚠ Comment failed: {e}[/yellow]")
+        if attachment:
+            upload_attachment(client, cfg.jiraBaseUrl, auth, created.issueKey, attachment)
 
         with console.status("Setting status to In Progress..."):
             try:

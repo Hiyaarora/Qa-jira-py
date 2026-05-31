@@ -151,11 +151,17 @@ def ask_attachment() -> AttachmentInfo | None:
         return None
     kind = detect_input_type(raw)
     if kind == "google-sheet":
+        desc = questionary.text(
+            "What is this Google Sheet? (e.g. Test Cases, Bug Report, Performance Data):"
+        ).ask()
+        if desc is None:
+            desc = ""
+        desc = desc.strip() or "Google Sheet"
         return AttachmentInfo(
             type="google-sheet",
             url=raw.strip("\"'"),
-            name="Google Sheet link",
-            label="Google Sheet",
+            name=desc,
+            label=desc,
         )
     if kind == "file":
         try:

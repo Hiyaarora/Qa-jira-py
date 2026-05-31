@@ -99,7 +99,10 @@ def parse_json_loose(raw: str) -> dict[str, Any]:
 
 
 def build_bug_result(
-    parsed: dict[str, Any], raw_description: str, environment: str
+    parsed: dict[str, Any],
+    raw_description: str,
+    environment: str,
+    attachment: "AttachmentInfo | None" = None,
 ) -> AIBugResult:
     title = (parsed.get("title") or "").strip() or raw_description[:80]
     steps_raw = parsed.get("stepsToReproduce")
@@ -129,6 +132,16 @@ def build_bug_result(
     if environment:
         blocks.append(make_paragraph([make_text("Environment", bold=True)]))
         blocks.append(make_paragraph([make_text(environment)]))
+
+    if attachment and attachment.type == "google-sheet" and attachment.url:
+        blocks.append(
+            make_paragraph(
+                [
+                    make_text(f"{attachment.label}: ", bold=True),
+                    make_link("Open Google Sheet", attachment.url),
+                ]
+            )
+        )
 
     preview_parts: list[str] = [
         "Steps to Reproduce:\n" + "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(steps)),
@@ -200,7 +213,7 @@ def build_task_result(
         blocks.append(
             make_paragraph(
                 [
-                    make_text("Test Cases: ", bold=True),
+                    make_text(f"{attachment.label}: ", bold=True),
                     make_link("Open Google Sheet", attachment.url),
                 ]
             )
