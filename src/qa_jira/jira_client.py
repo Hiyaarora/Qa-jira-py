@@ -540,6 +540,8 @@ def fetch_bugs_in_epic(
                     "created",
                     "description",
                     "issuetype",
+                    "environment",
+                    "customfield_10148",
                 ],
                 "maxResults": 100,
             },
@@ -565,6 +567,14 @@ def fetch_bugs_in_epic(
     for issue in issues:
         f = issue["fields"]
         desc_text = adf_to_plain_text(f.get("description")) if f.get("description") else ""
+
+        # Prefer the actual Jira environment field over keyword extraction
+        env = (
+            (f.get("customfield_10148") or {}).get("value")
+            or (f.get("environment") or "").strip()
+            or _extract_environment(desc_text)
+        )
+
         result.append(
             BugInEpic(
                 key=issue["key"],
@@ -576,7 +586,7 @@ def fetch_bugs_in_epic(
                 created=(f.get("created") or "")[:10],
                 description=desc_text,
                 url=f"{base_url}/browse/{issue['key']}",
-                environment=_extract_environment(desc_text),
+                environment=env,
             )
         )
     return result
