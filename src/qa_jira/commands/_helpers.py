@@ -32,10 +32,14 @@ def pick_user(
     client: httpx.Client, base_url: str, auth: str, label: str
 ) -> str | None:
     """Returns accountId or None to skip."""
-    if not questionary.confirm(f"Set a {label}?", default=False).ask():
+    ans = questionary.confirm(f"Set a {label}?", default=False).ask()
+    if not ans:
         return None
     while True:
-        query = (questionary.text(f"Search {label} by name or email:").ask() or "").strip()
+        query = questionary.text(f"Search {label} by name or email:").ask()
+        if query is None:
+            return None
+        query = query.strip()
         if not query:
             return None
         try:
@@ -60,6 +64,8 @@ def pick_user(
         choices.append(questionary.Choice("Search again", "__again__"))
         choices.append(questionary.Choice(f"Skip — no {label}", None))
         pick = questionary.select(f"Select {label}:", choices=choices).ask()
+        if pick is None:
+            return None
         if pick == "__again__":
             continue
         return pick
@@ -67,9 +73,12 @@ def pick_user(
 
 def pick_project(client: httpx.Client, base_url: str, auth: str):
     while True:
-        query = (questionary.text("Search Jira project/space (partial name):").ask() or "").strip()
+        query = questionary.text("Search Jira project/space (partial name):").ask()
+        if query is None:  # Ctrl+C / Escape
+            raise SystemExit(0)
+        query = query.strip()
         if not query:
-            console.print("[yellow]  Project is required[/yellow]")
+            console.print("[yellow]  Type a project name to search (e.g. 'AI' or 'HFC')[/yellow]")
             continue
         try:
             projects = search_projects(client, base_url, auth, query)
@@ -88,6 +97,8 @@ def pick_project(client: httpx.Client, base_url: str, auth: str):
         ]
         choices.append(questionary.Choice("Search again", "__again__"))
         pick = questionary.select("Select project:", choices=choices).ask()
+        if pick is None:
+            raise SystemExit(0)
         if pick == "__again__":
             continue
         return pick
@@ -96,14 +107,15 @@ def pick_project(client: httpx.Client, base_url: str, auth: str):
 def pick_epic(
     client: httpx.Client, base_url: str, auth: str, project_key: str, *, optional: bool
 ):
-    if optional and not questionary.confirm(
-        "Link this bug to an epic?", default=False
-    ).ask():
-        return None
+    if optional:
+        ans = questionary.confirm("Link this bug to an epic?", default=False).ask()
+        if not ans:
+            return None
     while True:
-        query = (
-            questionary.text("Search epic (partial name, empty to list all):").ask() or ""
-        ).strip()
+        query = questionary.text("Search epic (partial name, empty to list all):").ask()
+        if query is None:
+            return None
+        query = query.strip()
         try:
             epics = search_epics_in_project(client, base_url, auth, project_key, query)
         except ValueError as e:
@@ -123,18 +135,18 @@ def pick_epic(
         if optional:
             choices.append(questionary.Choice("Skip — no epic", None))
         pick = questionary.select("Select epic:", choices=choices).ask()
+        if pick is None:
+            return None
         if pick == "__again__":
             continue
         return pick
 
 
 def ask_attachment() -> AttachmentInfo | None:
-    raw = (
-        questionary.text(
-            "Attach file or Google Sheet URL (empty to skip):"
-        ).ask()
-        or ""
-    ).strip()
+    raw = questionary.text("Attach file or Google Sheet URL (empty to skip):").ask()
+    if raw is None:
+        return None
+    raw = raw.strip()
     if not raw:
         return None
     kind = detect_input_type(raw)

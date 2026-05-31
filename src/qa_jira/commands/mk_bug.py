@@ -64,6 +64,9 @@ def run() -> None:
             questionary.Choice("P3 — Minor (Medium)", "P3"),
         ],
     ).ask()
+    if priority is None:
+        console.print("[dim]Cancelled.[/dim]")
+        sys.exit(0)
 
     with httpx.Client(timeout=30) as client:
         assignee_id = pick_user(client, cfg.jiraBaseUrl, auth, "Assignee")
