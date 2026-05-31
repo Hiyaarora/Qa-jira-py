@@ -70,14 +70,9 @@ def test_get_provider_returns_http_provider():
     from qa_jira.models import Config
 
     cfg = Config(
-        jiraEmail="x",
-        jiraApiToken="y",
-        jiraBaseUrl="https://x",
-        accountId="a",
-        displayName="N",
-        aiProvider="openrouter",
-        aiApiKey="k",
-        aiModel="m",
+        jiraEmail="x", jiraApiToken="y", jiraBaseUrl="https://x",
+        accountId="a", displayName="N", aiProvider="openrouter",
+        aiApiKey="k", aiModel="m",
     )
     provider = get_provider(cfg)
     assert isinstance(provider, HttpProvider)
@@ -97,3 +92,37 @@ def test_http_provider_uses_custom_base_url():
     )
     provider = HttpProvider(cfg)
     assert provider._url == "https://my-endpoint.com/v1/chat/completions"
+
+
+def test_http_provider_falls_back_on_404(monkeypatch):
+    import httpx
+    from qa_jira.ai.http_provider import HttpProvider, FALLBACK_MODELS
+    from qa_jira.models import Config
+
+    calls = []
+
+    def fake_post(url, json=None, headers=None):
+        model = json["messages"][0]["content"] if False else json["model"]
+        calls.append(model)
+        if model != FALLBACK_MODELS[0]:
+            return httpx.Response(404, json={"error": {"message": "not found"}})
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": '{"title": "ok"}'}}]
+        })
+
+    cfg = Config(
+        jiraEmail="x", jiraApiToken="y", jiraBaseUrl="https://x",
+        accountId="a", displayName="N", aiProvider="openrouter",
+        aiApiKey="k", aiModel="bad-model:free",
+    )
+    provider = HttpProvider(cfg)
+
+    # Patch the internal _post to use fake_post
+    import unittest.mock as mock
+    with mock.patch.object(provider, "_post", side_effect=lambda m, s, u, t: fake_post(provider._url, json={"model": m})):
+        result = provider.complete_json("sys", "user", 100)
+
+    assert result == '{"title": "ok"}'
+    # First call was the configured model (bad), second was first fallback
+    assert calls[0] == "bad-model:free"
+    assert calls[1] == FALLBACK_MODELS[0]
