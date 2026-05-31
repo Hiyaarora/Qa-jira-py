@@ -119,7 +119,7 @@ console = Console()
 def print_help() -> None:
     console.print("\n[cyan]  jira[/cyan][dim] — QA Jira CLI[/dim]\n")
     console.print("  [green]jira setup[/green]          [dim]First-time configuration[/dim]")
-    console.print("  [green]jira task create[/green]    [dim]Create a daily QA task[/dim]")
+    console.print("  [green]jira task create[/green]    [dim]Create a QA task[/dim]")
     console.print("  [green]jira mk bug[/green]         [dim]Create a bug with AI-structured description[/dim]")
     console.print("  [green]jira mk bugsheet[/green]    [dim]Export bugs in an epic to a local Excel file[/dim]")
     console.print("  [green]jira rm <ID|URL>[/green]    [dim]Delete a Jira issue by key or URL[/dim]\n")

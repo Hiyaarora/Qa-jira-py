@@ -6,7 +6,7 @@ from rich.console import Console
 console = Console()
 
 _MENU = [
-    questionary.Choice("Create a daily QA task",              "task create"),
+    questionary.Choice("Create a QA task",                    "task create"),
     questionary.Choice("File a bug with AI description",      "mk bug"),
     questionary.Choice("Export epic bugs to Excel",           "mk bugsheet"),
     questionary.Choice("Delete a Jira issue",                 "rm"),
