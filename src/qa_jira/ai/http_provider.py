@@ -15,13 +15,16 @@ IMAGE_MIME = {
     ".webp": "image/webp",
 }
 
-# Vision-capable free models tried in order when images are present
+# Vision-capable free models tried in order when images are present.
+# Supplemented at runtime from the live /models API.
 VISION_MODELS = [
+    "nvidia/nemotron-nano-12b-v2-vl:free",
     "meta-llama/llama-3.2-11b-vision-instruct:free",
     "qwen/qwen2-vl-7b-instruct:free",
     "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.2-90b-vision-instruct:free",
 ]
+
+_VISION_KEYWORDS = ("vision", "-vl:", "-vl-", "vl:", "gemini", "llama-3.2")
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -138,21 +141,36 @@ class HttpProvider:
         max_tokens: int,
         image_paths: list[str] | None = None,
     ) -> str:
-        # When images are present, try vision models first
         if image_paths and self._use_fallbacks:
-            vision_first = [m for m in VISION_MODELS if m != self._model]
-            base_list = [self._model] + vision_first
-        else:
-            base_list = [self._model]
-
-        models_to_try = list(base_list)
-        if self._use_fallbacks:
+            # Build vision-first list from live models + seed list
             live_free = _fetch_free_models(self._api_key)
-            seen = set(base_list)
-            for m in live_free + FALLBACK_MODELS:
+            live_vision = [
+                m for m in live_free
+                if any(k in m.lower() for k in _VISION_KEYWORDS)
+            ]
+            seen: set[str] = set()
+            vision_list: list[str] = []
+            for m in live_vision + VISION_MODELS:
                 if m not in seen:
                     seen.add(m)
-                    models_to_try.append(m)
+                    vision_list.append(m)
+
+            # Try vision models; after exhausting them try text-only as last resort
+            models_to_try = vision_list
+            text_fallbacks = [
+                m for m in live_free + FALLBACK_MODELS if m not in seen
+            ]
+            models_to_try += text_fallbacks
+        else:
+            base_list = [self._model]
+            models_to_try = list(base_list)
+            if self._use_fallbacks:
+                live_free = _fetch_free_models(self._api_key)
+                seen = set(base_list)
+                for m in live_free + FALLBACK_MODELS:
+                    if m not in seen:
+                        seen.add(m)
+                        models_to_try.append(m)
 
         last_err = "No models available"
         for model in models_to_try:
