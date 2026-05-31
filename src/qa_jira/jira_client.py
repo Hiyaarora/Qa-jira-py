@@ -105,6 +105,25 @@ def search_epics_in_project(
     query: str,
 ) -> list[Epic]:
     query = query.strip()
+
+    # Accept a bare issue key (HFC-27) or a browse URL — look up directly
+    key_match = _KEY_RE.search(query) if "/browse/" in query else (
+        __import__("re").match(r'^[A-Z][A-Z0-9]*-\d+$', query.upper())
+    )
+    if key_match:
+        direct_key = (key_match.group(1) if "/browse/" in query else query).upper()
+        try:
+            resp = client.get(
+                f"{base_url}/rest/api/3/issue/{direct_key}?fields=summary,issuetype",
+                headers={"Authorization": auth},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return [Epic(key=direct_key, summary=data["fields"]["summary"])]
+        except Exception:
+            pass
+        return []
+
     if query:
         jql = (
             f'project = "{project_key}" AND issuetype = Epic '
