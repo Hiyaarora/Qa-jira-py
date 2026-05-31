@@ -38,11 +38,18 @@ def run() -> None:
     auth = basic_auth_header(cfg.jiraEmail, cfg.jiraApiToken)
     today = date.today().isoformat()
 
-    epic_key_raw = (
-        (questionary.text("Which epic? (e.g. QA-247):").ask() or "")
-        .strip()
-        .upper()
-    )
+    import re as _re
+    while True:
+        epic_key_raw = (
+            (questionary.text("Which epic? (e.g. QA-247):").ask() or "").strip().upper()
+        )
+        if not _re.match(r'^[A-Z][A-Z0-9]*-\d+$', epic_key_raw):
+            console.print(
+                f"[yellow]⚠ '{epic_key_raw}' doesn't look like a Jira issue key (e.g. HFC-315). Try again.[/yellow]"
+            )
+            continue
+        break
+
     with httpx.Client(timeout=30) as client:
         with console.status("Validating epic..."):
             try:

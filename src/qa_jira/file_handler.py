@@ -44,8 +44,11 @@ class FileInfo:
 
 def _clean_path(raw: str) -> str:
     s = (raw or "").strip()
+    # Strip surrounding quotes added by copy-paste or shell
     if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
         s = s[1:-1]
+    # Unescape shell-escaped spaces and special chars (e.g. Screenshot\ 2026\ ...)
+    s = s.replace("\\ ", " ")
     return s
 
 
