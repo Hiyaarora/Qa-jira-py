@@ -71,35 +71,48 @@ def run() -> None:
     console.print("\n[cyan]  jira setup — Let's get you configured[/cyan]\n")
     console.print(f"  [dim]Jira workspace:[/dim] [cyan]{JIRA_BASE_URL}[/cyan]")
 
+    # Step 1 & 2: email + token, looped together until validation succeeds.
     console.print("\n[dim]Step 1 of 4: Jira email[/dim]")
+    browser_opened = False
     while True:
-        jira_email_raw = questionary.text("Your Jira account email:").ask()
-        if jira_email_raw is None:          # Ctrl+C → exit cleanly
+        # --- Email ---
+        while True:
+            jira_email_raw = questionary.text("Your Jira account email:").ask()
+            if jira_email_raw is None:          # Ctrl+C → exit cleanly
+                console.print("[dim]Cancelled.[/dim]")
+                sys.exit(0)
+            if jira_email_raw.strip():
+                break
+            console.print("[yellow]⚠ Email cannot be empty. Please try again.[/yellow]")
+        jira_email = jira_email_raw.strip()
+
+        # --- Token ---
+        console.print("\n[dim]Step 2 of 4: Jira API token[/dim]")
+        if not browser_opened:
+            console.print("  Open the Atlassian token page, create a token, then paste it below.")
+            try:
+                webbrowser.open(JIRA_TOKEN_URL)
+            except Exception:
+                pass
+            browser_opened = True
+        jira_token = questionary.password("Paste your Jira API token:").ask()
+        if jira_token is None:                  # Ctrl+C → exit cleanly
             console.print("[dim]Cancelled.[/dim]")
             sys.exit(0)
-        if jira_email_raw.strip():          # not empty → move on
-            break
-        console.print("[yellow]⚠ Email cannot be empty. Please try again.[/yellow]")
-    jira_email = jira_email_raw.strip()
+        if not jira_token.strip():
+            console.print("[yellow]⚠ Token cannot be empty. Please try again.[/yellow]\n")
+            continue
 
-    console.print("\n[dim]Step 2 of 4: Jira API token[/dim]")
-    console.print("  Open the Atlassian token page, create a token, then paste it below.")
-    try:
-        webbrowser.open(JIRA_TOKEN_URL)
-    except Exception:
-        pass
-    jira_token = questionary.password("Paste your Jira API token:").ask()
-    if not jira_token:
-        sys.exit(1)
+        # --- Validate ---
+        with console.status("Validating Jira credentials..."):
+            try:
+                account_id, display_name = _validate_jira(jira_email, jira_token)
+            except Exception as e:
+                console.print(f"[red]✗ {e}[/red]\n")
+                console.print("[dim]Let's try your email and token again.[/dim]\n")
+                continue        # loop back — re-ask email + token only
+        break                   # success → leave the loop
 
-    with console.status("Validating Jira credentials..."):
-        try:
-            account_id, display_name = _validate_jira(jira_email, jira_token)
-        except Exception as e:
-            console.print(f"[red]✗ {e}[/red]")
-            if questionary.confirm("Retry Jira setup?", default=True).ask():
-                return run()
-            sys.exit(1)
     console.print(f"[green]✔[/green] Jira authenticated — Hello, [white]{display_name}[/white]")
 
     console.print("\n[dim]Step 3 of 4: AI provider[/dim]")
