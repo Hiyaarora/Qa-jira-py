@@ -72,10 +72,14 @@ def run() -> None:
     console.print(f"  [dim]Jira workspace:[/dim] [cyan]{JIRA_BASE_URL}[/cyan]")
 
     console.print("\n[dim]Step 1 of 4: Jira email[/dim]")
-    jira_email_raw = questionary.text("Your Jira account email:").ask()
-    if not jira_email_raw or not jira_email_raw.strip():
-        console.print("[red]Email is required.[/red]")
-        sys.exit(1)
+    while True:
+        jira_email_raw = questionary.text("Your Jira account email:").ask()
+        if jira_email_raw is None:          # Ctrl+C → exit cleanly
+            console.print("[dim]Cancelled.[/dim]")
+            sys.exit(0)
+        if jira_email_raw.strip():          # not empty → move on
+            break
+        console.print("[yellow]⚠ Email cannot be empty. Please try again.[/yellow]")
     jira_email = jira_email_raw.strip()
 
     console.print("\n[dim]Step 2 of 4: Jira API token[/dim]")
