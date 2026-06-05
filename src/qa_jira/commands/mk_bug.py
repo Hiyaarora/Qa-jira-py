@@ -47,11 +47,15 @@ def run() -> None:
         choices=["Production", "Demo", "Test"],
     ).ask()
 
+    # Ask for the attachment BEFORE the AI call so a screenshot can be read by the AI
+    attachment = ask_attachment()
+
     # Collect image paths — user-attached screenshot (if any)
     image_paths: list[str] = []
     if attachment and attachment.type == "file" and attachment.filePath:
-        from qa_jira.ai.http_provider import IMAGE_MIME
         from pathlib import Path as _Path
+
+        from qa_jira.ai.http_provider import IMAGE_MIME
         if _Path(attachment.filePath).suffix.lower() in IMAGE_MIME:
             image_paths.append(attachment.filePath)
 
@@ -83,7 +87,6 @@ def run() -> None:
     with httpx.Client(timeout=30) as client:
         assignee_id = pick_user(client, cfg.jiraBaseUrl, auth, "Assignee")
         owner_id = pick_user(client, cfg.jiraBaseUrl, auth, "Issue Owner")
-        attachment = ask_attachment()
 
         project = pick_project(client, cfg.jiraBaseUrl, auth)
         console.print(
