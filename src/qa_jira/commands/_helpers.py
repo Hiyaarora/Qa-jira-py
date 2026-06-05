@@ -29,12 +29,17 @@ console = Console()
 
 
 def pick_user(
-    client: httpx.Client, base_url: str, auth: str, label: str
+    client: httpx.Client,
+    base_url: str,
+    auth: str,
+    label: str,
+    project_key: str | None = None,
 ) -> str | None:
     """Returns accountId or None to skip."""
     ans = questionary.confirm(f"Set a {label}?", default=False).ask()
     if not ans:
         return None
+    empty_count = 0
     while True:
         query = questionary.text(f"Search {label} by name or email:").ask()
         if query is None:
@@ -43,14 +48,20 @@ def pick_user(
         if not query:
             return None
         try:
-            users = search_users(client, base_url, auth, query)
+            users = search_users(client, base_url, auth, query, project_key)
         except ValueError as e:
             console.print(f"[yellow]⚠ Search failed: {e}[/yellow]")
             if not questionary.confirm("Try again?", default=True).ask():
                 return None
             continue
         if not users:
+            empty_count += 1
             console.print(f'[yellow]  ⚠ No users found for "{query}"[/yellow]')
+            if empty_count >= 2:
+                console.print(
+                    "[dim]  Tip: your Jira account may not have permission to search users.\n"
+                    "  You can skip this and set the assignee manually in Jira later.[/dim]"
+                )
             if not questionary.confirm("Search again?", default=True).ask():
                 return None
             continue

@@ -85,9 +85,8 @@ def run() -> None:
         sys.exit(0)
 
     with httpx.Client(timeout=30) as client:
-        assignee_id = pick_user(client, cfg.jiraBaseUrl, auth, "Assignee")
-        owner_id = pick_user(client, cfg.jiraBaseUrl, auth, "Issue Owner")
-
+        # Project first — so assignee/owner search can be project-scoped
+        # (works even without the global "Browse users" permission)
         project = pick_project(client, cfg.jiraBaseUrl, auth)
         console.print(
             f"[green]✔[/green] Project: [white]{project.name}[/white] ({project.key})"
@@ -97,6 +96,9 @@ def run() -> None:
             console.print(
                 f"[green]✔[/green] Epic: [white]{epic.summary}[/white] ({epic.key})"
             )
+
+        assignee_id = pick_user(client, cfg.jiraBaseUrl, auth, "Assignee", project.key)
+        owner_id = pick_user(client, cfg.jiraBaseUrl, auth, "Issue Owner", project.key)
 
         extra_fields = prompt_for_required_extra_fields(
             client, cfg.jiraBaseUrl, auth, project.key, "Bug"

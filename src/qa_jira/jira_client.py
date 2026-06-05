@@ -149,24 +149,51 @@ def search_epics_in_project(
 
 
 def search_users(
-    client: httpx.Client, base_url: str, auth: str, query: str
+    client: httpx.Client,
+    base_url: str,
+    auth: str,
+    query: str,
+    project_key: str | None = None,
 ) -> list[User]:
-    url = f"{base_url}/rest/api/3/user/search"
+    """Search Jira users.
+
+    If project_key is given, uses the project-scoped /user/assignable/search
+    endpoint first — it works even when the account lacks the global
+    "Browse users and groups" permission. Falls back to the global
+    /user/search endpoint otherwise.
+    """
+
+    def _parse(resp: httpx.Response) -> list[User]:
+        return [
+            User(
+                accountId=u["accountId"],
+                displayName=u["displayName"],
+                emailAddress=u.get("emailAddress") or "",
+            )
+            for u in resp.json()
+        ]
+
+    # Project-scoped search first (better permission profile)
+    if project_key:
+        resp = client.get(
+            f"{base_url}/rest/api/3/user/assignable/search",
+            params={"query": query, "project": project_key, "maxResults": 8},
+            headers={"Authorization": auth, "Accept": "application/json"},
+        )
+        if resp.status_code < 400:
+            users = _parse(resp)
+            if users:
+                return users
+        # else fall through to the global search
+
     resp = client.get(
-        url,
+        f"{base_url}/rest/api/3/user/search",
         params={"query": query, "maxResults": 8},
         headers={"Authorization": auth, "Accept": "application/json"},
     )
     if resp.status_code >= 400:
         raise ValueError(f"User search failed: {_err_msgs(resp)}")
-    return [
-        User(
-            accountId=u["accountId"],
-            displayName=u["displayName"],
-            emailAddress=u.get("emailAddress") or "",
-        )
-        for u in resp.json()
-    ]
+    return _parse(resp)
 
 
 # ─── Write-side endpoints ───────────────────────────────────────────────────
