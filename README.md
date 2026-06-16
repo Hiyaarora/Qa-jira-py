@@ -48,7 +48,7 @@ jira task create
 ```
 
 **Flow:**
-1. Enter the epic key (e.g. `HFC-315`) or paste the Jira URL
+1. Enter the epic key (e.g. `PROJ-315`) or paste the Jira URL
 2. Pick what you worked on: tested a story / wrote test cases / other
 3. Enter story key/URL, bug IDs, notes, and optional attachment
 4. AI generates a professional task description
@@ -89,7 +89,7 @@ jira mk bugsheet
 
 **Flow:**
 1. Search for a Jira project by partial name
-2. Search for an epic by name, key (e.g. `HFC-27`), or paste a Jira URL
+2. Search for an epic by name, key (e.g. `PROJ-27`), or paste a Jira URL
 3. All bugs in the epic are fetched from Jira
 4. An Excel file is written to your current directory named `bugsheet-{EPIC}-{DATE}.xlsx`
 
